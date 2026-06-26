@@ -39,7 +39,11 @@ jobs:
           dotnet pack src/SqlCommandBuilder/SqlCommandBuilder.csproj
           --configuration Release
           --no-build
+          --output ${{ github.workspace }}/dist
           -p:PackageVersion=${{ steps.version.outputs.value }}
+
+      - name: List packages
+        run: ls -l ${{ github.workspace }}/dist
 
       - name: Login to NuGet (Trusted Publishing)
         uses: NuGet/login@v1
@@ -49,7 +53,7 @@ jobs:
 
       - name: Push to NuGet
         run: >
-          dotnet nuget push "dist/SqlCommandBuilder.${{ steps.version.outputs.value }}.nupkg"
+          dotnet nuget push "${{ github.workspace }}/dist/*.nupkg"
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
