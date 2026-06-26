@@ -1,92 +1,58 @@
-﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Globalization;
-using System.Linq;
-using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace SqlCommandBuilder
 {
-    public static class IDapperCommandExtensions
+    public static class QueryCommandExtensions
     {
-        /// <summary>
-        /// Set Adapter for query. This is to separate specially for Limit and Offset query pattern accross database type adapter.
-        /// </summary>
-        /// <param name="command">IDapperCommand</param>
-        /// <param name="adapter">CommandAdapter : Type of supported adapter to translate to query</param>
-        /// <returns>IDapperCommand</returns>
-        public static IQueryCommand SetAdapter(this IQueryCommand command, CommandAdapter adapter) => command.SetAdapter(adapter);
-
-        /// <summary>
-        /// Add additional selection fields to query
-        /// </summary>
-        /// <param name="command">IDapperCommand</param>
-        /// <param name="selections">string[] : Array of fields or columns</param>
-        /// <returns>IDapperCommand</returns>
+        /// <summary>Add additional columns to a SELECT statement.</summary>
         public static IQueryCommand Select(this IQueryCommand command, string[] selections)
         {
             foreach (var selection in selections)
-            {
                 command.AddField(selection);
-            }
-
             return command;
         }
 
-        /// <summary>
-        /// Initial select query statement with specified table and column to select
-        /// </summary>
-        /// <param name="command">IDapperCommand</param>
-        /// <param name="tableName">string : Table name</param>
-        /// <param name="selections">string[] : Array of fields or columns</param>
-        /// <returns>IDapperCommand</returns>
+        /// <summary>Initialize a SELECT statement. Pass an empty array for SELECT *.</summary>
         public static IQueryCommand Select(this IQueryCommand command, string tableName, string[] selections) => command.InitSelect(tableName, selections);
 
-        /// <summary>
-        /// Initial insert query statement with specific tablename
-        /// </summary>
-        /// <param name="command">IDapperCommand</param>
-        /// <param name="tableName">string : Table name</param>
-        /// <param name="parameters">Dictionary<string, object?> : Sets of column name and the value to insert</param>
-        /// <returns>IDapperCommand</returns>
+        /// <summary>Initialize an INSERT statement.</summary>
         public static IQueryCommand Insert(this IQueryCommand command, string tableName, Dictionary<string, object?> parameters) => command.InitInsert(tableName, parameters);
 
-        /// <summary>
-        /// Initial update query statement with specific tablename. !!!Don't forget to add Where() to update specific data!!!
-        /// </summary>
-        /// <param name="command">IDapperCommand</param>
-        /// <param name="tableName">string : Table name</param>
-        /// <param name="parameters">Dictionary<string, object?> : Sets of column name and the value to update</param>
-        /// <returns>IDapperCommand</returns>
+        /// <summary>Initialize an UPDATE statement. Don't forget to add a Where() clause to scope the update.</summary>
         public static IQueryCommand Update(this IQueryCommand command, string tableName, Dictionary<string, object?> parameters) => command.InitUpdate(tableName, parameters);
 
-        /// <summary>
-        /// Initial delete query statement with specific tablename. !!!Don't forget to add Where() to update specific data!!!
-        /// </summary>
-        /// <param name="command">IDapperCommand</param>
-        /// <param name="tableName">string : Table name</param>
-        /// <returns>IDapperCommand</returns>
+        /// <summary>Initialize a DELETE statement. Don't forget to add a Where() clause to scope the delete.</summary>
         public static IQueryCommand Delete(this IQueryCommand command, string tableName) => command.InitDelete(tableName);
 
+        /// <summary>Append a WHERE condition combined with AND.</summary>
         public static IQueryCommand WhereAnd(this IQueryCommand command, string column, CommandMatchType matchType, object? value) => command.AddWhereAnd(column, matchType, value);
 
+        /// <summary>Append a WHERE condition combined with OR.</summary>
         public static IQueryCommand WhereOr(this IQueryCommand command, string column, CommandMatchType matchType, object? value) => command.AddWhereOr(column, matchType, value);
 
+        /// <summary>Append a parenthesized group of conditions combined with AND.</summary>
         public static IQueryCommand WhereGroupAnd(this IQueryCommand command, ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)> conditions) => command.AddWhereAndGroup(conditions);
 
+        /// <summary>Append a parenthesized group of conditions combined with OR.</summary>
         public static IQueryCommand WhereGroupOr(this IQueryCommand command, ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)> conditions) => command.AddWhereOrGroup(conditions);
 
+        /// <summary>Append an ORDER BY clause.</summary>
         public static IQueryCommand Sort(this IQueryCommand command, string column, CommandOrderDirection direction) => command.AddSort(column, direction);
 
+        /// <summary>Append a JOIN. The right-hand value of each ON condition is a column reference (e.g. "b.id"), not a parameter value.</summary>
         public static IQueryCommand Join(this IQueryCommand command, CommandReferenceType type, string tableName, ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)> onConditions) => command.AddReference(type, tableName, onConditions);
 
+        /// <summary>Append a GROUP BY column.</summary>
+        public static IQueryCommand GroupBy(this IQueryCommand command, string column) => command.AddGroupBy(column);
+
+        /// <summary>Append a HAVING condition (use with GroupBy).</summary>
+        public static IQueryCommand Having(this IQueryCommand command, string column, CommandMatchType matchType, object? value, CommandOperation operation = CommandOperation.And)
+            => command.AddHaving(column, matchType, value, operation);
+
+        /// <summary>Set a LIMIT and OFFSET for paging. Requires SetAdapter().</summary>
         public static IQueryCommand Take(this IQueryCommand command, int take, int skip = 0) => command.SetTake(take).SetSkip(skip);
 
+        /// <summary>Build the script and parameters.</summary>
         public static IQueryCommandResult Build(this IQueryCommand command) => command.BuildCommand();
     }
 }

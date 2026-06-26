@@ -1,118 +1,64 @@
-﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SqlCommandBuilder
 {
     public interface IQueryCommand
     {
         /// <summary>
-        /// Set query adapter. Mysql, SqlServer, Postgre, Orcale
+        /// Set query adapter to control adapter-specific syntax (Mysql, SqlServer, PgSql, Oracle).
+        /// Currently controls LIMIT/OFFSET vs OFFSET..FETCH NEXT syntax.
         /// </summary>
-        /// <param name="adapter">CommandAdapter</param>
-        /// <returns>IDapperCommand</returns>
         IQueryCommand SetAdapter(CommandAdapter adapter);
-        /// <summary>
-        /// Add additional column for select statement
-        /// </summary>
-        /// <param name="columns">string: column name to select</param>
-        /// <returns></returns>
+
+        /// <summary>Append an additional column to the SELECT list.</summary>
         IQueryCommand AddField(string column);
-        /// <summary>
-        /// Set Select statement for query clause with initial columns selection
-        /// </summary>
-        /// <param name="tableName">string: Table name</param>
-        /// <param name="columns">string[]: Array of column name. Don't forget source alias if table name contains alias</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Initialize a SELECT statement with a table and an initial column list. Pass an empty array to select all columns (*).</summary>
         IQueryCommand InitSelect(string tableName, string[] columns);
-        /// <summary>
-        /// Set Insert statement for query clause with specific columns and values to insert
-        /// </summary>
-        /// <param name="tableName">string: Table name</param>
-        /// <param name="parameters">Dictionary<string, object?>: Sets of column and value to insert</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Initialize an INSERT statement. Keys are column names; values are parameter-bound at build time.</summary>
         IQueryCommand InitInsert(string tableName, Dictionary<string, object?> parameters);
-        /// <summary>
-        /// Set Update statement for query clause with specific column and values to update
-        /// </summary>
-        /// <param name="tableName">string: Table name</param>
-        /// <param name="parameters">Dictionary<string, object?>: Sets of column and value to update</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Initialize an UPDATE statement. Add WHERE conditions to scope the update.</summary>
         IQueryCommand InitUpdate(string tableName, Dictionary<string, object?> parameters);
-        /// <summary>
-        /// Set Delete statement for query clause. !!!Please add where condition to prevent delete all data!!!
-        /// </summary>
-        /// <param name="tableName">string: Table name</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Initialize a DELETE statement. Add WHERE conditions to avoid deleting all rows.</summary>
         IQueryCommand InitDelete(string tableName);
-        /// <summary>
-        /// Add condition with AND operation to other condition
-        /// </summary>
-        /// <param name="column">string: Column name</param>
-        /// <param name="matchType">CommandMatchType: Match type like equal, lesser, greater etc.</param>
-        /// <param name="value">object?: Value of condition. It also accept wildcard characters for Contains, ContainsStart and ContainsEnd condition</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append a WHERE condition combined with AND.</summary>
         IQueryCommand AddWhereAnd(string column, CommandMatchType matchType, object? value);
-        /// <summary>
-        /// Add condition with OR operation to other condition
-        /// </summary>
-        /// <param name="column">string: Column name</param>
-        /// <param name="matchType">CommandMatchType: Match type like equal, lesser, greater etc.</param>
-        /// <param name="value">object?: Value of condition. It also accept wildcard characters for Contains, ContainsStart and ContainsEnd condition</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append a WHERE condition combined with OR.</summary>
         IQueryCommand AddWhereOr(string column, CommandMatchType matchType, object? value);
-        /// <summary>
-        /// Add Sets of condition that grouped by ( and ) with AND operation to other conditions.
-        /// </summary>
-        /// <param name="conditions">ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)></param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append a parenthesized group of conditions combined with AND with the rest of the WHERE clause.</summary>
         IQueryCommand AddWhereAndGroup(ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)> conditions);
-        /// <summary>
-        /// Add Sets of condition that grouped by ( and ) with OR operation to other conditions.
-        /// </summary>
-        /// <param name="conditions">ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)></param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append a parenthesized group of conditions combined with OR with the rest of the WHERE clause.</summary>
         IQueryCommand AddWhereOrGroup(ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)> conditions);
+
         /// <summary>
-        /// Add Reference (JOIN) of other source to the initial source.
+        /// Add a JOIN clause. Each ON condition's value is treated as a column reference (e.g. "b.id"),
+        /// not as a parameter value. The value is validated as a safe identifier to prevent SQL injection.
         /// </summary>
-        /// <param name="type">CommandReferenceType</param>
-        /// <param name="tableName">string: Table name</param>
-        /// <param name="onConditions">ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)></param>
-        /// <returns>IDapperCommand</returns>
         IQueryCommand AddReference(CommandReferenceType type, string tableName, ICollection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)> onConditions);
-        /// <summary>
-        /// Add sort clause to statement
-        /// </summary>
-        /// <param name="column">string: Column name to sort</param>
-        /// <param name="direction">CommandOrderDirection</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append an ORDER BY clause.</summary>
         IQueryCommand AddSort(string column, CommandOrderDirection direction);
-        /// <summary>
-        /// Add column to grouped
-        /// </summary>
-        /// <param name="groupName">string column name</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append a GROUP BY column.</summary>
         IQueryCommand AddGroupBy(string column);
-        /// <summary>
-        /// Add limit clause to statement
-        /// </summary>
-        /// <param name="limit">int</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Append a HAVING condition (for use with GROUP BY).</summary>
+        IQueryCommand AddHaving(string column, CommandMatchType matchType, object? value, CommandOperation operation = CommandOperation.And);
+
+        /// <summary>Set the row limit (LIMIT/FETCH NEXT). Requires SetAdapter() when greater than zero.</summary>
         IQueryCommand SetTake(int limit);
-        /// <summary>
-        /// Add offset clause to statement
-        /// </summary>
-        /// <param name="offset">int</param>
-        /// <returns>IDapperCommand</returns>
+
+        /// <summary>Set the row skip (OFFSET).</summary>
         IQueryCommand SetSkip(int offset);
-        /// <summary>
-        /// Build command then produce raw sql query and parameters to bind
-        /// </summary>
-        /// <returns>IDapperCommandResult</returns>
+
+        /// <summary>Build the script and parameters.</summary>
         IQueryCommandResult BuildCommand();
     }
 }

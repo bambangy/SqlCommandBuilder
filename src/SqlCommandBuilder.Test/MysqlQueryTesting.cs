@@ -1,38 +1,41 @@
 using Dapper;
 using MySql.Data.MySqlClient;
-using Newtonsoft.Json;
 using System.Collections.ObjectModel;
 
 namespace SqlCommandBuilder.Test
 {
+    [Explicit("Requires a running MySQL 'sakila' database. Set MYSQL_CONN env var to override the connection string.")]
     public class MySqlQueryTesting
     {
-        private MySqlConnection _connection;
+        private MySqlConnection _connection = null!;
 
         [SetUp]
         public void Setup()
         {
-            string connectionString = "Server=localhost;Database=sakila;Uid=root;Pwd=Developer11!;";
+            string connectionString = Environment.GetEnvironmentVariable("MYSQL_CONN")
+                ?? "Server=localhost;Database=sakila;Uid=root;Pwd=Developer11!;";
             _connection = new MySqlConnection(connectionString);
             _connection.Open();
         }
+
+        [TearDown]
+        public void TearDown() => _connection?.Dispose();
 
         [Test]
         public void TestComposeScript()
         {
             IQueryCommandResult strCommand = CommandBuilder.Init()
-                .Select("film_category a", new string[] { "b.title Film_Title", "b.description Film_Description", "c.name Category" })
-                .Join(CommandReferenceType.Join, "film b", new Collection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)>()
+                .Select("film_category a", new[] { "b.title Film_Title", "b.description Film_Description", "c.name Category" })
+                .Join(CommandReferenceType.Join, "film b", new Collection<(CommandOperation, string, CommandMatchType, object?)>
                 {
-                    new (CommandOperation.And, "b.film_id", CommandMatchType.Equal, "a.film_id")
+                    (CommandOperation.And, "b.film_id", CommandMatchType.Equal, "a.film_id")
                 })
-                .Join(CommandReferenceType.Join, "category c", new Collection<(CommandOperation operation, string column, CommandMatchType matchType, object? value)>()
+                .Join(CommandReferenceType.Join, "category c", new Collection<(CommandOperation, string, CommandMatchType, object?)>
                 {
-                    new (CommandOperation.And, "c.category_id", CommandMatchType.Equal, "a.category_id")
+                    (CommandOperation.And, "c.category_id", CommandMatchType.Equal, "a.category_id")
                 })
-                .WhereAnd("title", CommandMatchType.Contains, "%G%")
+                .WhereAnd("b.title", CommandMatchType.Contains, "%G%")
                 .Build();
-            Console.WriteLine(strCommand.Script.ToString());
             Assert.That(strCommand.Script, Is.Not.Null);
             Assert.That(strCommand.Parameters, Is.Not.Null);
         }
@@ -40,12 +43,11 @@ namespace SqlCommandBuilder.Test
         [Test]
         public void TestQuerySimpleSelect()
         {
-            IQueryCommandResult strCommand = CommandBuilder.Init()
-                .Select("film", new string[] { })
+            var strCommand = CommandBuilder.Init()
+                .Select("film", Array.Empty<string>())
                 .Build();
 
-            IEnumerable<dynamic> films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
-            Console.WriteLine(JsonConvert.SerializeObject(films));
+            var films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
             Assert.That(films, Is.Not.Null);
             Assert.That(films.Any(), Is.True);
         }
@@ -53,13 +55,12 @@ namespace SqlCommandBuilder.Test
         [Test]
         public void TestQueryWhere()
         {
-            IQueryCommandResult strCommand = CommandBuilder.Init()
-                .Select("film", new string[] { })
+            var strCommand = CommandBuilder.Init()
+                .Select("film", Array.Empty<string>())
                 .WhereAnd("rating", CommandMatchType.Equal, "PG")
                 .Build();
 
-            IEnumerable<dynamic> films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
-            Console.WriteLine(JsonConvert.SerializeObject(films));
+            var films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
             Assert.That(films, Is.Not.Null);
             Assert.That(films.Any(), Is.True);
         }
@@ -67,76 +68,63 @@ namespace SqlCommandBuilder.Test
         [Test]
         public void TestQueryLimit()
         {
-            IQueryCommandResult strCommand = CommandBuilder.Init()
+            var strCommand = CommandBuilder.Init()
                 .SetAdapter(CommandAdapter.Mysql)
-                .Select("film", new string[] { })
+                .Select("film", Array.Empty<string>())
                 .Take(5)
                 .Build();
 
-            IEnumerable<dynamic> films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
-            Console.WriteLine(JsonConvert.SerializeObject(films));
-            Assert.That(films, Is.Not.Null);
+            var films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
             Assert.That(films.Count(), Is.EqualTo(5));
         }
 
         [Test]
         public void TestQueryOrder()
         {
-            IQueryCommandResult strCommand = CommandBuilder.Init()
-                .Select("film", new string[] { })
+            var strCommand = CommandBuilder.Init()
+                .Select("film", Array.Empty<string>())
                 .Sort("title", CommandOrderDirection.Desc)
                 .Build();
 
-            IEnumerable<dynamic> films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters);
-            Console.WriteLine(JsonConvert.SerializeObject(films));
-            Assert.That(films, Is.Not.Null);
-            Assert.That(films.Count(), Is.GreaterThan(0));
-            Assert.That(films.FirstOrDefault().title.Substring(0, 1), Is.EqualTo("Z"));
+            var films = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters).ToList();
+            Assert.That(films, Is.Not.Empty);
+            string firstTitle = films.First().title;
+            Assert.That(firstTitle.Substring(0, 1), Is.EqualTo("Z"));
         }
 
         [Test]
         public void TestInsertUpdateDelete()
         {
-            IQueryCommandResult strCommand = CommandBuilder.Init()
-                .Insert("category", new Dictionary<string, object?>()
-                {
-                    { "name", "Fiksi Ilmiah" }
-                })
+            var insert = CommandBuilder.Init()
+                .Insert("category", new Dictionary<string, object?> { { "name", "Fiksi Ilmiah" } })
                 .Build();
-            _connection.Execute(strCommand.Script, strCommand.Parameters);
-            strCommand = CommandBuilder.Init()
-                .Select("category", new string[] { })
+            _connection.Execute(insert.Script, insert.Parameters);
+
+            var select = CommandBuilder.Init()
+                .Select("category", Array.Empty<string>())
                 .WhereAnd("name", CommandMatchType.Equal, "Fiksi Ilmiah")
                 .Build();
-            dynamic category = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters).FirstOrDefault();
+            dynamic? category = _connection.Query<dynamic>(select.Script, select.Parameters).FirstOrDefault();
             Assert.That(category, Is.Not.Null);
 
-            strCommand = CommandBuilder.Init()
-                .Update("category", new Dictionary<string, object?>()
-                {
-                    {"name", "Karya Ilmiah" }
-                })
-                .WhereAnd("category_id", CommandMatchType.Equal, (int)category.category_id)
+            var update = CommandBuilder.Init()
+                .Update("category", new Dictionary<string, object?> { { "name", "Karya Ilmiah" } })
+                .WhereAnd("category_id", CommandMatchType.Equal, (int)category!.category_id)
                 .Build();
-            _connection.Execute(strCommand.Script, strCommand.Parameters);
+            _connection.Execute(update.Script, update.Parameters);
 
-            strCommand = CommandBuilder.Init()
-                .Select("category", new string[] { })
+            var delete = CommandBuilder.Init()
+                .Delete("category")
+                .WhereAnd("category_id", CommandMatchType.Equal, (int)category!.category_id)
+                .Build();
+            _connection.Execute(delete.Script, delete.Parameters);
+
+            var verify = CommandBuilder.Init()
+                .Select("category", Array.Empty<string>())
                 .WhereAnd("name", CommandMatchType.Equal, "Karya Ilmiah")
                 .Build();
-            category = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters).FirstOrDefault();
-            Assert.That(category, Is.Not.Null);
-
-            strCommand = CommandBuilder.Init()
-                .Delete("category").WhereAnd("category_id", CommandMatchType.Equal, (int)category.category_id).Build();
-            _connection.Execute(strCommand.Script, strCommand.Parameters);
-
-            strCommand = CommandBuilder.Init()
-                .Select("category", new string[] { })
-                .WhereAnd("name", CommandMatchType.Equal, "Karya Ilmiah")
-                .Build();
-            category = _connection.Query<dynamic>(strCommand.Script, strCommand.Parameters).FirstOrDefault();
-            Assert.That(category, Is.Null);
+            dynamic? after = _connection.Query<dynamic>(verify.Script, verify.Parameters).FirstOrDefault();
+            Assert.That(after, Is.Null);
         }
     }
 }
